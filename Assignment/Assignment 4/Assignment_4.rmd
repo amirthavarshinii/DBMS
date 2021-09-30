@@ -1,0 +1,124 @@
+---
+title: "Assignment 4"
+author: "Amirthavarshini"
+output: pdf_document
+---
+
+Loading the required libraries
+```{r}
+install.packages("tinytex")
+tinytex::install_tinytex()
+library(RSQLite)
+```
+
+## Note:
+## Please make sure to place MediaDB.db and Assignment_4.rmd file in the same location
+## If not please provide the path for MediaDB.db file before running it. 
+Connecting to Database
+```{r}
+dbcon <- dbConnect(SQLite(), "MediaDB.db")
+```
+
+## Assumption: 
+## Since the question 1 doesn't specify if we need to consider all products, I am not considering unique customers. i.e if a customer has multiple invoices, his name would appear multiple times. In case we need to consider the customer only once for multiple invoices, we need to add DISTINCT in the select statement. 
+
+1. (5 pts) What are the last names and emails of all customer who made purchased in the store?
+```{sql connection=dbcon}
+
+SELECT c.LastName, c.Email 
+from customers c INNER JOIN invoices i 
+ON c.Customerid = i.customerid;   
+
+```
+
+## Note: For the below output, please click on the black right arrow in the output to see Title. 
+
+2. (5 pts) What are the names of each albums and the artist who created it?
+```{sql connection=dbcon}
+
+SELECT Name, Title
+FROM artists ar INNER JOIN albums ab
+on ar.ArtistId = ab.ArtistId;
+
+```
+
+
+## Note: Since CustomerID is primary key, I am not considering DISTINCT in count as primary key cannot be duplicate. 
+
+3. (10 pts) What are the total number of unique customers for each state, ordered alphabetically by state who made at least one purchase?
+
+```{sql connection=dbcon}
+
+select state, count(customerid)
+from customers
+where state is not null
+group by state
+order by State asc;
+
+```
+
+4. (10 pts) Which states have more than 10 unique customers?
+```{sql connection=dbcon}
+
+SELECT state
+FROM customers
+WHERE state is NOT NULL
+GROUP BY state
+HAVING COUNT(CustomerId) > 10;
+
+```
+
+5. (10 pts) What are the names of the artists who made an album containing the substring "symphony" in the album title?
+
+```{sql connection=dbcon}
+
+SELECT a.name
+FROM artists a INNER JOIN albums ab on 
+a.ArtistId = ab.ArtistId
+WHERE ab.Title like '%symphony%';
+
+```
+
+##Note: 
+## For Question 6, I have considered ID instead of names to avoid various mistakes that arise from writing wrong spelling 
+
+6. (15 pts) What are the names of all artists who performed MPEG (video or audio) tracks in either the "Brazilian Music" or the "Grunge" playlists?
+
+```{sql connection=dbcon}
+
+select DISTINCT(artists.Name)
+FROM artists INNER JOIN albums USING (ArtistId)
+INNER JOIN tracks USING (Albumid)
+INNER JOIN media_types USING (MediaTypeid)
+INNER JOIN playlist_track USING (TrackId)
+INNER JOIN playlists USING (Playlistid)
+WHERE media_types.MediaTypeId IN (1,3)AND (playlists.PlaylistId = 11 or playlists.PlaylistId = 16 )
+
+```
+
+7. (20 pts) How many artists published at least 10 MPEG audio or video tracks?
+
+```{sql connection=dbcon}
+
+SELECT COUNT(ArtistId)
+FROM (select artists.ArtistId 
+FROM artists INNER JOIN albums USING (ArtistId)
+INNER JOIN tracks USING (Albumid)
+INNER JOIN media_types USING (MediaTypeid)
+WHERE media_types.MediaTypeId IN (1,3)
+GROUP BY artists.ArtistId
+HAVING COUNT(tracks.TrackId) >= 10)
+
+```
+
+8. (25 pts) What is the total length of each playlist in hours? List the playlist id and name of only those playlists that are longer than 2 hours, along with the length in hours rounded to two decimals.
+
+```{sql connection=dbcon}
+
+SELECT playlist_track.PlaylistId, playlists.Name, ROUND(CAST(SUM(trackS.Milliseconds) as double)/3600000,2) as Hours
+FROM tracks INNER JOIN playlist_track USING (TrackId)
+INNER JOIN playlists USING (PlaylistId)
+GROUP BY playlist_track.PlaylistId
+HAVING Hours > 2
+
+```

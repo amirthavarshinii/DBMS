@@ -1,0 +1,227 @@
+---
+title: "assignment6.rmd"
+author: "Amirthavarshini"
+output: pdf_document
+---
+
+#Reading libraries
+```{r}
+library(sqldf)
+library(RSQLite)
+```
+
+Note: Please have Assignment6.db file in the same location as this rmd file.
+```{r}
+dbcon <- dbConnect(SQLite(), dbname="Assignment6.db")
+```
+
+#Creating the respective tables in DB file. 
+```{sql connection=dbcon}
+
+CREATE TABLE IF NOT EXISTS course(
+	num VARCHAR(300) PRIMARY KEY NOT NULL, 
+    title VARCHAR(300) NOT NULL,
+    lengthindays INTEGER NOT NULL,   
+    tution DOUBLE(10,2) NOT NULL	
+); 
+
+```
+
+```{sql connection=dbcon}
+CREATE TABLE IF NOT EXISTS module(
+	mid INTEGER PRIMARY KEY NOT NULL,
+    title VARCHAR(300) NOT NULL,
+    lengthinminutes INTEGER NOT NULL,
+    d_id VARCHAR(300) NOT NULL,
+    aid INTEGER NOT NULL,
+    FOREIGN KEY(aid) REFERENCES author ON DELETE CASCADE,
+	FOREIGN KEY(d_id) REFERENCES difficultytable ON DELETE CASCADE
+); 
+
+```
+
+```{sql connection=dbcon}
+CREATE TABLE IF NOT EXISTS difficultytable(
+	d_id INTEGER PRIMARY KEY NOT NULL,
+	difficulty VARCHAR(300) NOT NULL
+);
+
+```
+
+```{sql connection=dbcon}
+CREATE TABLE IF NOT EXISTS coursetopic(
+	num VARCHAR(300) NOT NULL,
+    mid INTEGER NOT NULL,
+    PRIMARY KEY(num, mid),
+    FOREIGN KEY(num) REFERENCES course(num),
+    FOREIGN KEY(mid) REFERENCES module(mid)
+); 
+
+```
+
+```{sql connection=dbcon}
+CREATE TABLE IF NOT EXISTS author(
+	aid INTEGER PRIMARY KEY NOT NULL,
+    name varchar(300) NOT NULL,
+    c_id VARCHAR(300) NOT NULL,
+    FOREIGN KEY(c_id) REFERENCES certificatetable ON DELETE CASCADE
+); 
+
+```
+
+```{sql connection=dbcon}
+CREATE TABLE IF NOT EXISTS certificatetable(
+	c_id INTEGER PRIMARY KEY NOT NULL,
+	certifications VARCHAR(300) NOT NULL
+);
+
+```
+
+```{sql connection=dbcon}
+CREATE TABLE IF NOT EXISTS email(
+	id INTEGER PRIMARY KEY NOT NULL,
+    email VARCHAR(300) NOT NULL,
+    aid INTEGER NOT NULL,
+    FOREIGN KEY(aid) REFERENCES author(aid) ON DELETE CASCADE
+);   
+
+```
+## End of creating the tables. 
+
+
+
+## Creating Triggers on Course table. 
+## Creating Audit log on Course table
+## Creating AuditCourse table which stores audit logs of course table. 
+```{sql connection=dbcon}
+CREATE TABLE IF NOT EXISTS AuditCourse(
+  auditID INTEGER PRIMARY KEY AUTOINCREMENT, 
+  course_id VARCHAR(300) NOT NULL, 
+  title VARCHAR(300) NOT NULL, 
+  status Text NOT NULL, 
+  time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+
+## Creating an Insert trigger
+## Reason: It is common in software industry to maintain a log of what we do so when the program goes down we can start debugging and look for the cause. 
+## Purpose: The purpose of the trigger is to make a entry in AuditCourse table when a new course is added to the table. 
+```{sql connection=dbcon}
+CREATE TRIGGER if not EXISTS insert_on_course 
+AFTER 
+  INSERT ON course FOR EACH ROW
+  BEGIN 
+  INSERT INTO AuditCourse (
+    course_id, title, status, time
+  ) SELECT NEW.num as course_id, 
+            NEW.title as title, 
+            "Course added to Course table" as status,
+            CURRENT_TIMESTAMP as time
+    FROM course c
+    where c.num = NEW.num;
+  END;
+```
+
+## Creating an update trigger on Course table
+## Reason: Sometimes a course might get updated by program and we are not aware of it when a the program throws error because of this. So Its necessary to know if a course gets updates so we need to maintain a update log. 
+## Purpose: The purpose of the trigger is to make a entry in AuditCourse table when a course gets updated.
+```{sql connection=dbcon}
+CREATE TRIGGER if not EXISTS update_on_course 
+AFTER 
+  UPDATE ON course FOR EACH ROW
+  BEGIN 
+  INSERT INTO AuditCourse (
+    course_id, title, status, time
+  ) SELECT NEW.num as course_id, 
+            c.title as title, 
+            "Course was updated" as status,
+            CURRENT_TIMESTAMP as time
+    FROM course c
+    where c.num = NEW.num;
+  END;
+```
+
+
+## Creating a constraint trigger on Course table
+## Reason: To maintain consistancy accross the database, I am making sure that the title is always in uppercase. 
+## Purpose: The purpose of the trigger is make sure the title of the course is always in upper case. 
+```{sql connection=dbcon}
+CREATE TRIGGER if not EXISTS uppercase_course_title 
+AFTER 
+  INSERT ON course FOR EACH ROW
+  BEGIN 
+  UPDATE course SET title = UPPER(title);
+  END;
+```
+
+
+### Working/Demonstration of Trigger
+
+##Insertion Trigger
+1. Contents of course table before insertion. 
+```{sql connection=dbcon}
+select * from course;
+```
+2. Contents of Audit table before Insertion
+```{sql connection=dbcon}
+select * from AuditCourse;
+```
+
+3. Inserting into course table
+```{sql connection=dbcon}
+INSERT INTO course VALUES ('cs5200', 'DBMS', 90, 6500.00);
+```
+
+4. Contents of course table after insertion. 
+```{sql connection=dbcon}
+select * from course;
+```
+5. Contents of Audit table after Insertion
+## Please Note that there is an update trigger on insert statement i.e changing into uppercase when a update statement is run so you can see an update entry as well. 
+```{sql connection=dbcon}
+select * from AuditCourse;
+```
+
+
+##Update Trigger
+1. Contents of course table before Updation. 
+```{sql connection=dbcon}
+select * from course;
+```
+2. Contents of Audit table before Updation
+```{sql connection=dbcon}
+select * from AuditCourse;
+```
+
+3. Inserting into course table
+```{sql connection=dbcon}
+UPDATE course SET title = "DataBase" where num = 'cs5200';
+```
+
+4. Contents of course table after insertion. 
+```{sql connection=dbcon}
+select * from course;
+```
+5. Contents of Audit table after Insertion
+```{sql connection=dbcon}
+select * from AuditCourse;
+```
+
+
+
+## Constraint triggers:
+1. Contents of course table before insertion. 
+```{sql connection=dbcon}
+select * from course;
+```
+
+2. Inserting into course table
+```{sql connection=dbcon}
+INSERT INTO course VALUES ('DS5220', 'supervised machined learning', 120, 6500.00);
+```
+
+3. Contents of course table after Insertion. We can see that the title is in uppercase eventhough we entered in lowercase 
+```{sql connection=dbcon}
+select * from course;
+```

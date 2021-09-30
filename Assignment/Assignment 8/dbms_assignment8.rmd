@@ -1,0 +1,30 @@
+---
+title: "Assignment 8"
+author: "Amirthavarshini"
+output: pdf_document
+---
+
+```{r}
+library(XML)
+```
+
+```{r}
+
+path <- "D:/Northeastern University/CS5200\ DBMS/Assignment/Assignment\ 8/"
+xmlFile <- "amirthavarshini_xml_assignment8.xml"
+fp <- paste0(path,xmlFile)
+
+xmlObj <- xmlParse(fp, validate = T)
+xmlObjTree <- xmlTreeParse(fp)
+```
+
+```{r executeXpath}
+xpathEx <-"count(//txns/security[@cusip='JNT']/@tid)"
+output<-xpathSApply(xmlObj,xpathEx)
+
+print(output)
+```
+
+```{r printXML}
+xmlObj
+```

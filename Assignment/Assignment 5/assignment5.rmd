@@ -1,0 +1,66 @@
+---
+title: "Assignment 5"
+author: "Amirthavarshini"
+output: pdf_document
+---
+
+#Reading libraries
+```{r}
+library(sqldf)
+library(RSQLite)
+library(ggplot2)
+library(dplyr)
+```
+
+#Connecting to DB
+```{r}
+db.conn <- dbConnect(SQLite(), dbname="MediaDB.db")
+```
+
+1. (20 pts) In the R Notebook, connect to the SQLite MediaDB.db database and then load, using SQL SELECT, the "invoice_items" table into a data frame called rs. Add a new column to rs for the extended price called ExtPrice that is Quantity times Price. Using R, what is the average extended price (rounded to 2 decimals)? Do not use {sql} chunks for this.
+```{r}
+
+sqlCmd = "SELECT * FROM invoice_items"
+rs = dbGetQuery(db.conn, sqlCmd)
+rs$ExtPrice <- rs$Quantity * rs$UnitPrice
+print(head(rs))
+avg <- round(mean(rs$ExtPrice), 2)
+sprintf("Average of extended price is: %.2f", avg)
+
+```
+
+2. (30 pts) Using sqldf, write a SQL query against the data frame rs from the question above that finds the total amount for each invoice (i.e., the sum of the extended prices for the invoice_items in each invoice) and the number of items in the invoice. So, the result set contains rows that each have the invoice ID, the total, and the number of items.
+```{r}
+# sum(ExtPrice)
+# sum(quantity)
+#groupby InvoiceId
+
+rss <- sqldf("select InvoiceId, SUM(ExtPrice) as total, SUM(Quantity) as Num_of_items from rs group by InvoiceId")
+
+print(rss)
+```
+
+3. (30 pts) Using R and the result from the prior question, create a scatter plot of the total number of items in an invoice (x axis) versus the total (y axis). Add proper axis labels.
+```{r}
+plot_df <- sqldf("select InvoiceId, SUM(ExtPrice) as total, SUM(Quantity) as Num_of_items from rs group by InvoiceId")
+
+ggplot(data = plot_df) +
+  geom_point(mapping=aes(x=Num_of_items, y=total))+
+  labs(title = "Number of Items vs Total", x = "Number of Items", y = "Total")
+
+
+```
+
+4. (20 pts) Write and execute a SQL UPDATE statement that applies a 10% discount to the total amount for each invoice if it has more than 5 items and stores that discounted amount in a new column called DiscPrice. Using a separate {r} chunk show that the query executed properly by displaying a part of the table. If you cannot use sqldf, then apply to the database directly instead; either are acceptable as long as you use a SQL UPDATE.
+
+```{r}
+
+alt_tab <- sqldf(c("alter table rss add DiscPrice numeric","select * from rss"))
+
+
+upd_tab<- sqldf(c("UPDATE alt_tab SET DiscPrice = total- 0.1*total WHERE Num_of_items >5","select * from main.alt_tab"))
+
+head(upd_tab,15)
+
+
+```

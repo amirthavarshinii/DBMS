@@ -1,0 +1,60 @@
+---
+title: "Assignment 9"
+author: "Amirthavarshini"
+output: pdf_document
+---
+
+```{r}
+library(XML)
+```
+
+```{r}
+path <- "D:/Northeastern\ University/CS5200\ DBMS/Assignment/Assignment\ 9/"
+xmlFile <- "Books-v3.xml"
+fp <- paste0(path,xmlFile)
+
+xmlObj <- xmlParse(fp)
+```
+
+
+1. What are the titles of all books written by "Galos, Mike"? List the titles and the prices.
+```{r}
+xpathEx1 <-"//catalog/book[author='Galos, Mike']/title/text()|//catalog/book[author='Galos, Mike']/price/text()"
+x1<-xpathSApply(xmlObj,xpathEx1)
+
+print(x1)
+```
+
+2. In what genre is the book with id "bk109".
+
+```{r}
+xpathEx2 <-"//catalog/book[@id = 'bk109']/genre/text()"
+x2<-xpathSApply(xmlObj,xpathEx2)
+
+print(x2)
+```
+3.What are the titles of the books that sell for the lowest price? (Use the min aggregation function)
+
+```{r}
+xpathEx3 <-"//catalog/book[price=min(//catalog/book/price/text())]/title/text()"
+x3<-xpathSApply(xmlObj,xpathEx3)
+
+print(x3)
+```
+
+4. List the title and prices of all books in the "Computer" genre
+
+```{r}
+xpathEx4 <-"//catalog/book[genre='Computer']/title/text()|//catalog/book[genre='Computer']/price/text()"
+x4<-xpathSApply(xmlObj,xpathEx4)
+
+print(x4)
+```
+5. What is the number of all books that cost less than $5?
+
+```{r}
+xpathEx5 <-"count(//catalog/book[price<5.0]/title/text())"
+x5<-xpathSApply(xmlObj,xpathEx5)
+
+print(x5)
+```

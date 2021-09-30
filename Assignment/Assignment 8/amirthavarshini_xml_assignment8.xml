@@ -1,0 +1,124 @@
+<?xml version="1.0"?>
+
+<!DOCTYPE txns
+[
+	<!ELEMENT txns ((customer|security|trade)*)>
+	<!ELEMENT customer (cid, cname, pvalue)>
+	<!ATTLIST customer tid IDREF #REQUIRED>
+	<!ELEMENT cname (#PCDATA)>
+	<!ELEMENT pvalue (#PCDATA)>
+	<!ELEMENT cid (#PCDATA)>
+	<!ELEMENT security (cusip, market)>
+	<!ELEMENT cusip (#PCDATA)>
+	<!ATTLIST security tid IDREF #REQUIRED>
+	<!ELEMENT market (#PCDATA)>
+	<!ELEMENT trade (tdate, tqty, tprice)>
+	<!ATTLIST trade tid ID #REQUIRED>
+	<!ELEMENT tdate (#PCDATA)>
+	<!ELEMENT tqty (#PCDATA)>
+	<!ELEMENT tprice (#PCDATA)>
+]>
+
+<txns>
+	<customer tid="id_3">
+		<cid>cid_1</cid>
+		<cname>Virat</cname>
+		<pvalue>102995</pvalue>
+	</customer>
+	<customer tid="id_2">
+		<cid>cid_2</cid>
+		<cname>Rajath</cname>
+		<pvalue>123432</pvalue>
+	</customer>
+	<customer tid="id_7">
+		<cid>cid_3</cid>
+		<cname>Maxwell</cname>
+		<pvalue>127621</pvalue>
+	</customer>
+	<customer tid="id_1">
+		<cid>cid_4</cid>
+		<cname>AB DE</cname>
+		<pvalue>239876</pvalue>
+	</customer>
+	<customer tid="id_6">
+		<cid>cid_5</cid>
+		<cname>James</cname>
+		<pvalue>123456</pvalue>
+	</customer>
+	<customer tid="id_5">
+		<cid>cid_6</cid>
+		<cname>Rohith</cname>
+		<pvalue>123098</pvalue>
+	</customer>
+	<customer tid="id_4">
+		<cid>cid_7</cid>
+		<cname>Pollard</cname>
+		<pvalue>663276</pvalue>
+	</customer>
+	
+	<security tid="id_3">
+		<cusip>FB</cusip>
+		<market>235.75</market>
+	</security>
+	<security tid="id_2">
+		<cusip>GOOG</cusip>
+		<market>215.15</market>
+	</security>
+	<security tid="id_1">
+		<cusip>MST</cusip>
+		<market>105.15</market>
+	</security>
+	<security tid="id_4">
+		<cusip>WFC</cusip>
+		<market>275.15</market>
+	</security>
+	<security tid="id_6">
+		<cusip>BFC</cusip>
+		<market>300.15</market>
+	</security>
+	<security tid="id_7">
+		<cusip>HBI</cusip>
+		<market>175.15</market>
+	</security>
+	<security tid="id_5">
+		<cusip>LTC</cusip>
+		<market>285.15</market>
+	</security>
+	
+	<trade tid= "id_1" >
+		<tdate>04/11/21</tdate>
+		<tqty>100</tqty>
+		<tprice>233.5</tprice>
+	</trade>
+	<trade tid= "id_2" >
+		<tdate>05/11/21</tdate>
+		<tqty>102</tqty>
+		<tprice>253.5</tprice>
+	</trade>
+	<trade tid= "id_3" >
+		<tdate>05/21/21</tdate>
+		<tqty>112</tqty>
+		<tprice>203.5</tprice>
+	</trade>
+	<trade tid= "id_4" >
+		<tdate>01/22/21</tdate>
+		<tqty>90</tqty>
+		<tprice>230.0</tprice>
+	</trade>
+	<trade tid= "id_5" >
+		<tdate>01/07/21</tdate>
+		<tqty>92</tqty>
+		<tprice>203.0</tprice>
+	</trade>
+	<trade tid= "id_6" >
+		<tdate>02/05/21</tdate>
+		<tqty>132</tqty>
+		<tprice>243.5</tprice>
+	</trade>
+	<trade tid= "id_7" >
+		<tdate>03/30/21</tdate>
+		<tqty>109</tqty>
+		<tprice>213.5</tprice>
+	</trade>
+
+</txns>
