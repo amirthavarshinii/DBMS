@@ -1,0 +1,170 @@
+---
+title: "Practicum 2"
+date: "4/19/2021"
+output: pdf_document
+---
+
+Importing the libraries
+```{r}
+library("XML")
+```
+
+When running the program please make sure to change the path or else the program will throw an error. 
+```{r}
+path <- "D://Northeastern\ University//CS5200\ DBMS//Practicum/Practicum\ 2/"
+xmlFile <- "pubmed_sample.xml"
+fp <- paste0(path,xmlFile)
+```
+
+```{r}
+# Reading the XML file and parse into DOM
+xmlDOM <- xmlParse(file = fp)
+
+# get the root node of the DOM tree
+root <- xmlRoot(xmlDOM)
+```
+
+```{r}
+# get number of children of root (number of purchase orders)
+numPO <- xmlSize(root)
+numPO
+```
+
+# Defining all the dataframes
+```{r}
+pubmed_article.df <- data.frame (id = integer(),
+                          statusid = character(),
+                          owner = character(),
+                          pmid_version = character(),
+                          pmid = character(),
+                          dates = character(),
+                          article_pubmodel_id = character(),
+                          article_title = F,
+                          author_list_complete_id = F,
+                          language = charecter(),
+                          grant_list_completed = F)
+
+medline_citation.df <- data.frame (citation_status_id  = integer(),
+                          citation_status_name = charecter())
+
+article_pubmodel.df <- data.frame (article_pubmodel_name  = charecter(),
+                          article_pubmodel_id = integer())
+
+journal.df <- data.frame (article_id = integer(),
+                          issn_type_id = character(),
+                          issn_type_name_id = character(),
+                          journal_issue_cited_medium_id = character(),
+                          volume = character(),
+                          issue = character(),
+                          title = character(),
+                          iso_abbreviation = F,
+                          pub_date = F)
+
+volume_of_journal.df <- data.frame (journal_cited_medium_id  = charecter(),
+                          journal_name_issue_cited_medium = integer())
+
+issntype.df <- data.frame (issn_type_id  = charecter(),
+                          issn_type_name = integer())
+
+author.df <- data.frame (article_id = integer(),
+                          author_id = character(),
+                          last_name = character(),
+                          first_name = character(),
+                          initials = character(),
+                          affiliation = character()
+                          )
+
+grant.df <- data.frame (article_id = integer(),
+                          grant_id = character(),
+                          acronym = character(),
+                          agency = character(),
+                          country = character()
+                          )
+
+publication.df <- data.frame (article_id = integer(),
+                          publication_type_id = character(),
+                          publication_type_name = character()
+                          )
+
+history.df <- data.frame (article_id = integer(),
+                          pubstatus_id = character(),
+                          pubstatus_name = character(),
+                          year = character(),
+                          month = character(),
+                          day = character(),
+                          hour = character(),
+                          minute = F)
+
+```
+
+```{r}
+
+for (m in 1:numPO){
+  node <- root[[m]]
+  # Getting data from medline_citation
+  medline_citation <- node[[1]]
+  #Getting pmid
+  m_pmid <- medline_citation[[1]]
+  # Getting date created
+  m_date_created <- medline_citation[[2]]
+  m_date_completed <- medline_citation[[3]]
+  m_date_revised <- medline_citation[[4]]
+  
+  
+  ## Getting article
+  article <- medline_citation[[5]]
+  
+  ## Getting journal within the article
+  journal <- article[[1]]
+  j_issn <- journal[[1]]
+  j_journal_issue <- journal[[2]]
+  j_title <- journal[[3]]
+  j_iso_abbrevation <- journal[[4]]
+  
+  a_title <- article[[2]]
+  a_pagination <- article[[3]]
+  
+  a_elocation_id <- article[[4]]
+  
+  abstract <- article[[5]]
+  ## Note: Probabily need to complete abstract with a loop
+  
+  author_list <- article[[6]]  
+  ## Note: Need to complete authorlist with a loop
+  a_language <- article[[7]]
+  a_publication_type_list <- article[[8]]
+  
+  article_date <- article[[9]]
+  
+  ## End of article
+  
+  ## Medline journal info
+  medline_journal_info <- medline_citation[[6]]
+  mji_Country <- medline_journal_info[[1]]
+  mji_MedlineTA <- medline_journal_info[[2]]
+  mji_NlmUniqueID <- medline_journal_info[[3]]
+  mji_ISSNLinking <- medline_journal_info[[4]]
+  ## End of Medline journal info
+  
+  ## The below medline_citation are optional need to handle this
+  other_id <- medline_citation[[7]]
+  keywordlist <- medline_citation[[8]]
+  
+  ## Start of pubmedData
+  pubmedData <- node[[2]]
+  
+  hitory <- pubmedData[[1]]
+  publication_status <- pubmedData[[2]]
+  
+  ## Article List
+  article_List <- pubmedData[[3]]
+  ## Loop over the article list 
+  
+  print(publication_status)
+  break
+}
+
+
+
+
+```

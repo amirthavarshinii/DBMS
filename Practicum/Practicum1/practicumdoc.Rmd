@@ -1,0 +1,371 @@
+---
+title: "PRACTICUM 1: Design & Implement a Relational Database"
+output: html_notebook
+author: Priyanka Balaji Ramanathan, Amirthavarshini Sockalingam Bama
+---
+
+## Introduction 
+This practicum deals with creating a database schema based on some data about birdstrikes. Normalizing said schema into BCNF, loading the given data into the schema and compute some basic analytics on the data. 
+
+
+Install and call the libraries required for cleaning the data and connecting to a local MySql instance. 
+```{r}
+library(RMariaDB)
+library("tidyverse")
+library("tidyr")
+library("janitor")
+library(splitstackshape)
+```
+
+Connecting to a local MySql instance which is already set up in MySql Workbench (user_name, password, database name, etc)
+```{r}
+localuserpassword <- "practicum_1"
+birdstrikedb <- dbConnect(RMariaDB::MariaDB(), user='balajiramanathan_p', password=localuserpassword, dbname='birdstrikedata', host='localhost')
+```
+
+## PHASE 1: CREATING AND DEFINING THE DATABASE
+The first part of the practicum deals with creating the schema of the database. The objective is to create the schema in BCNF. The schema is explained in an ER diagram below. 
+
+
+<div style="width:100%; height:100%">
+![Bird Strikes ER Diagram](./PracticumERD.png)
+</div>
+
+Creating table Airport to store the details of an airport such as the airport name and the origin state. The attributes are defaulted to Unknown and N/A on the off chance that no value is inserted into this table. 
+```{sql connection=birdstrikedb}
+CREATE TABLE Airport 
+(
+  AirportName VARCHAR(80) DEFAULT 'Unknown',
+  State VARCHAR(30) DEFAULT 'N/A',
+  PRIMARY KEY(AirportName, State)
+);
+```
+
+
+Creating table Aircraft to store the details of an aircraft such as the airport model, type of aircraft, where the aircraft is large with appropriate default values. 
+```{sql connection=birdstrikedb}
+CREATE TABLE Aircraft 
+(
+  Model VARCHAR(20) DEFAULT 'Unknown',
+  Type enum('Airplane', 'Unknown') DEFAULT 'Unknown',
+  isLarge Boolean DEFAULT FALSE,
+  PRIMARY KEY(Model)
+);
+```
+
+
+Creating table Altitude to store the altitude details of an aircraft during which it struck bird(s). Mandating a default value of -1 for the altitude and No information for the range. -1 is used as a default value as we are only considering birdstrikes above sea level and hence having a value below 0 as an altitude is not likely in a real life scenario. Hence using -1 as a default value acts as a flag and lets the developer (or whoever is querying the data) know that there wasn't any input for that particular incident. 
+```{sql connection=birdstrikedb}
+CREATE TABLE Altitude
+(
+  Altitude INT PRIMARY KEY CHECK(Altitude >= -1) DEFAULT(-1), 
+  AltitudeRange VARCHAR(15) DEFAULT('No information')
+);
+```
+
+
+Creating table AircraftEngine to store the engine details for every aircraft. This table is created based on the assumption that every aircraft model can have multiple number of engines (Upgrade, downgrade, etc.). On that assumption, having NumberOfEngines in the original Aircraft table would violate 2NF (since AircraftModel, NumberOfEngines would be the composite primary key and the other attributes of the aircraft are not functionally dependent on the whole key). Default value for NumberOfEngines is kept at 0 to flag the lack of input.
+```{sql connection=birdstrikedb}
+CREATE TABLE AircraftEngine
+(
+  AircraftModel VARCHAR(20),
+  NumberOfEngines INT CHECK(NumberOfEngines >= 0) DEFAULT 0,
+  FOREIGN KEY(AircraftModel) REFERENCES Aircraft(Model),
+  PRIMARY KEY(AircraftModel, NumberOfEngines)
+);
+```
+
+
+Creating table WildlifeStruckRange to store the details of the number of wildlife struck by an aircraft. Here a check constraint for the NumberOfWildLifeStruck is employed that checks whether the actual number is greater than 1. This is used since if the original value is lesser than 1 (hitting zero birds, fractions are too morbid) then this incident wouldn't warrant being a part of the "birdstrikes" database. Similarly defaulting the StruckRange to 'at least 1' for the same reason.  
+```{sql connection=birdstrikedb}
+CREATE TABLE WildlifeStruckRange
+(
+  NumberOfWildlifeStruck INT PRIMARY KEY CHECK(NumberOfWildlifeStruck >= 1) DEFAULT 1,
+  StruckRange VARCHAR(20) DEFAULT('at least 1')
+)
+```
+
+
+Creating table IncidentDescription to store the incident details of an aircraft birdstrike. This contains all values that are descriptive to the incident itself such as impact to flight, damage caused, etc. Enums are used for WildlifeSize and SkyCondition since the values given in the data seem to spread over all the possible values and hence adding to the type of values seem rather unlikely. Most of the values are defaulted to Unknown or None instead of any substantial value to prevent any calculation error for future data analysis. Similar to the Altitude table, the feetAbove values are defaulted to -1 to flag the lack of input for those attributes. The totalCost and NumberOfPeopleInjured values are defaulted to zero, however. This is done based on the assumption that if there was a value greater than zero, it would have been recorded. Having a negative value might negatively impact any data analysis in the future that could very possibly ask about the cumulative total number of people injured or cumulative cost. 
+```{sql connection=birdstrikedb}
+CREATE TABLE IncidentDescription
+(
+  RecordID INT PRIMARY KEY AUTO_INCREMENT, 
+  NumberWildlifeStruck INT DEFAULT(1),
+  FlightImpact VARCHAR(25) DEFAULT('Unknown'),
+  Damage VARCHAR(30) DEFAULT('Unknown'),
+  PhaseOfFlight enum('Approach', 'Landing Roll', 'Climb', 
+  'Take-off run', 'Descent','Taxi','Parked', 'Unknown') DEFAULT('Unknown'),
+  SpecimenCollected BOOLEAN DEFAULT FALSE, 
+  SpecimenSentToSmithsonian BOOLEAN DEFAULT FALSE, 
+  Remarks VARCHAR(300) DEFAULT 'NONE', 
+  WildlifeSize enum('small', 'medium', 'large') DEFAULT 'small',
+  skyCondition enum('no cloud', 'some cloud', 'overcast', 'unknown') DEFAULT 'unknown', 
+  wildlifeSpecies VARCHAR(30) DEFAULT 'Unknown', 
+  totalCost FLOAT DEFAULT 0 CHECK(totalCost >= 0), 
+  pilotWarned BOOLEAN DEFAULT FALSE, 
+  feetAbove INT(4) CHECK(feetAbove >= -1) DEFAULT(-1), 
+  peopleInjured INT CHECK(peopleInjured >= 0) DEFAULT(0),
+  FOREIGN KEY(feetabove) REFERENCES altitude(altitude),
+  FOREIGN KEY(NumberWildlifeStruck) REFERENCES 
+  WildlifeStruckRange(NumberOfWildlifeStruck)
+)
+```
+
+
+Creating table FlightDetails to store the flight details of an aircraft birdstrike. This table includes values such as the airportName, flightdate, aircraftmodel, etc. This is mapped to the incidentdescription table using the IncidentID key which references the RecordID attribute in the IncidentDescription table. As mentioned previously, most of the string values are defaulted to Unknown to flag the lack of input. The flightdate value is defaulted to 12/31/1969 which is a common date that signifies the date before the Unix Epoch. 
+A separate table for the flight details was created instead of including these details with the incident ID. This was because of the use case mentioned in the problem description (A pilot types out the information). Sometimes, the incident description could be described by someone who is not the pilot and then the flight details can be added by the pilot themselves using the Record ID that was generated from the incident table. 
+Separating the two tables according to incident description and flight details seemed appropriate since it seemed far less arduous for a user to populate the database. (assuming a great GUI is taking shape)
+```{sql connection=birdstrikedb}
+CREATE TABLE FlightDetails
+(
+  IncidentID INT NOT NULL PRIMARY KEY,
+  AirportName VARCHAR(80) NOT NULL DEFAULT 'Unknown',
+  FlightDate DATE DEFAULT(DATE_FORMAT('%Y-%m-%d','1969-12-31')) NOT NULL,
+  AircraftModel VARCHAR(20) NOT NULL DEFAULT 'Unknown', 
+  Operator VARCHAR(50) DEFAULT 'Unknown',
+  FOREIGN KEY(AirportName) REFERENCES Airport(AirportName),
+  FOREIGN KEY(AircraftModel) REFERENCES aircraft(Model),
+  FOREIGN KEY(IncidentID) REFERENCES incidentdescription(RecordID)
+)
+```
+
+
+Creating table IncidentPrecipitation to store the precipitation details for each incident. This table is created due to the orignal data containing multivalued attributes which violates the first normal form. This table maps the precipitation (which is an enum containing the precipitation values) to the incidentID and has a composite primary key of incidentId and Precipitation. 
+```{sql connection=birdstrikedb}
+CREATE TABLE IncidentPrecipitation
+(
+  incidentID INT, 
+  Precipitation enum('None', 'Rain', 'Snow', 'Fog', 'Unknown') default 'Unknown', 
+  FOREIGN KEY(incidentID) references incidentdescription(RecordID),
+  PRIMARY KEY(incidentID, Precipitation)
+)
+```
+
+## PHASE 2: Loading the data
+This phase contains the code chunks used to load the csv file (birdstrikes.csv) into the newly created database schema. This phase involved a lot of cleaning of the original data and some assumptions. 
+
+Reading the csv file and changing all empty cell values to NA
+```{r}
+birdstrikes <- read.csv(file = 'birdstrikes.csv',na.strings=c("","NA"))
+```
+
+
+Loading the wildlife struck details into a dataframe. Some of the values in the dataframe in the StruckRange column has no value given in the original data. Using fill method, the values for these are computed by taking the value from the row above this row. This is assuming that the row above is of the same range as the problematic row. (Mostly this is the case since there is a lot of duplication)
+```{r}
+wildlifestruck_df = data.frame('NumberOfWildlifeStruck'= birdstrikes$Wildlife..Number.Struck.Actual, 
+                            'StruckRange'=birdstrikes$Wildlife..Number.struck)
+wildlifestruck_df <- wildlifestruck_df[order(wildlifestruck_df$NumberOfWildlifeStruck),]
+wildlifestruck_df <- wildlifestruck_df %>% fill(StruckRange)
+wildlifestruck_df <- unique(wildlifestruck_df)
+```
+
+Loading the precipitation details into a dataframe. Some rows have multiple values in the precipiation column delimited by a comma. Using cSplit method, these are broken down into multiple rows each for each value. 
+```{r}
+precipitation_df <- data.frame("IncidentID"=birdstrikes$ï..Record.ID, "Precipitation"=birdstrikes$Conditions..Precipitation)
+precipitation_df = unique(precipitation_df)
+precipitation_df = cSplit(precipitation_df, "Precipitation", direction="long", sep = ",")
+```
+
+
+Loading the altitude details into a dataframe. There are some values in the Altitude column which have no value. This is replaced with -1 (default value given to indicate that there is no value given), since we are assuming that the altitude is only calculated above sea level. Also, the values are inputted with commas which are removed for parsing it as an integer. 
+```{r}
+altitude_df = data.frame('AltitudeRange'=birdstrikes$Altitude.bin, 'Altitude'=birdstrikes$Feet.above.ground)
+altitude_df = unique(altitude_df)
+altitude_df$Altitude = str_remove(altitude_df$Altitude, ",")
+altitude_df$Altitude[is.na(altitude_df$Altitude)] <- -1
+```
+
+
+Loading the Airport details into a dataframe. Some airport values have empty values and hence uses the State value for that particular row to maintain normalization. 
+```{r}
+airport_df = data.frame('AirportName'=birdstrikes$Airport..Name, 'State'=birdstrikes$Origin.State)
+airport_df = unique(airport_df)
+airport_df <- airport_df[order(airport_df$State),]
+airport_df$AirportName <- ifelse(is.na(airport_df$AirportName), airport_df$State, airport_df$AirportName)
+airport_df$AirportName = toupper(airport_df$AirportName)
+```
+
+
+Loading the aircraft details into a dataframe. Changing Yes and No values in isLarge column to boolean values for non erroneous parsing into the database. 
+```{r}
+aircraft_df = data.frame('Type' = birdstrikes$Aircraft..Type, 'Model' = birdstrikes$Aircraft..Make.Model, 'isLarge'=birdstrikes$Is.Aircraft.Large.)
+aircraft_df = unique(aircraft_df)
+aircraft_df$isLarge = tolower(aircraft_df$isLarge)
+aircraft_df$isLarge = str_replace(aircraft_df$isLarge, 'no', '0')
+aircraft_df$isLarge = str_replace(aircraft_df$isLarge, 'yes', '1')
+aircraft_df <- aircraft_df[order(aircraft_df$Model),]
+```
+
+
+Loading the aircraft engine details into a dataframe. Some rows have no values for engines and hence have defaulted values of 0. This table is created assuming that there could be aircrafts with the same model but different types of engines.
+```{r}
+aircraftengine_df = data.frame('AircraftModel' = birdstrikes$Aircraft..Make.Model, 'NumberOfEngines'=birdstrikes$Aircraft..Number.of.engines.)
+aircraftengine_df = unique(aircraftengine_df)
+aircraftengine_df$NumberOfEngines[is.na(aircraftengine_df$NumberOfEngines)] <- 0
+aircraftengine_df$NumberOfEngines = str_replace(aircraftengine_df$NumberOfEngines, "[a-zA-Z]", '0')
+```
+
+
+Loading the incident details into a dataframe. Changing PilotWarned column values to boolean values of 1 and 0 from Yes and No for parsing into database. Removed the commas in TotalCost and Feet Above values to parse it as integer. 
+```{r}
+incident_df = data.frame('RecordID'=birdstrikes$ï..Record.ID,
+                         'NumberWildlifeStruck'=birdstrikes$Wildlife..Number.Struck.Actual, 
+                         'FlightImpact'=birdstrikes$Effect..Impact.to.flight, 
+                         'Damage'=birdstrikes$Effect..Indicated.Damage,
+                         'PhaseOfFlight'=birdstrikes$When..Phase.of.flight, 
+                         'SpecimenCollected'=birdstrikes$Remains.of.wildlife.collected.,
+                         'SpecimenSentToSmithsonian'=birdstrikes$Remains.of.wildlife.sent.to.Smithsonian, 
+                         'Remarks'=birdstrikes$Remarks, 
+                         'WildlifeSize'=birdstrikes$Wildlife..Size, 
+                         'SkyCondition'=birdstrikes$Conditions..Sky, 
+                         'wildlifeSpecies'=birdstrikes$Wildlife..Species, 
+                         'TotalCost'=birdstrikes$Cost..Total.., 
+                         'PilotWarned'=birdstrikes$Pilot.warned.of.birds.or.wildlife., 
+                         'feetAbove'=birdstrikes$Feet.above.ground, 
+                         'peopleInjured'=birdstrikes$Number.of.people.injured)
+
+incident_df$PilotWarned = tolower(incident_df$PilotWarned)
+incident_df$PilotWarned = str_replace(incident_df$PilotWarned, 'n', '0')
+incident_df$PilotWarned = str_replace(incident_df$PilotWarned, 'y', '1') 
+incident_df$feetAbove = str_remove_all(incident_df$feetAbove, ",")
+incident_df$TotalCost = str_remove_all(incident_df$TotalCost, ",")
+incident_df$feetAbove = strtoi(incident_df$feetAbove)
+incident_df <- incident_df[order(incident_df$RecordID),]
+```
+
+
+Loading the flight day details into a dataframe. Changed the FlightDate column by removing the time (since all data is recorded for midnight) and formatting the date in type %Y-%m-%d format. Changed Airportname to the respective state if it is empty. Defaulted flightdate to 1969-12-31 since this is one day before Unix's epoch and hence commonly used as a  Defaulted Operator and Aircraft Model value to No information if it is empty. 
+```{r}
+flightdetails_df = data.frame('IncidentID' = birdstrikes$ï..Record.ID, 
+                              'AirportName'= birdstrikes$Airport..Name,
+                              'FlightDate'=birdstrikes$FlightDate,
+                              'AircraftModel'=birdstrikes$Aircraft..Make.Model,
+                              'Operator'=birdstrikes$Aircraft..Airline.Operator,
+                              'State'=birdstrikes$Origin.State)
+flightdetails_df = unique(flightdetails_df)
+flightdetails_df$FlightDate <- strptime(as.character(flightdetails_df$FlightDate), "%m/%d/%Y")
+flightdetails_df$AirportName <- ifelse(is.na(flightdetails_df$AirportName), flightdetails_df$State, flightdetails_df$AirportName)
+flightdetails_df$AirportName = toupper(flightdetails_df$AirportName)
+flightdetails_df$FlightDate <- strftime(flightdetails_df$FlightDate, '%Y-%m-%d')
+flightdetails_df$FlightDate[is.na(flightdetails_df$FlightDate)] <- '1969-12-31'
+flightdetails_df$Operator[is.na(flightdetails_df$Operator)]<- 'No Information'
+flightdetails_df$AircraftModel[is.na(flightdetails_df$AircraftModel)]<- 'No Information'
+flightdetails_df <- unique(flightdetails_df)
+flightdetails_df$State <- NULL
+```
+
+
+Writing all the dataframes into the respective tables in the database. 
+```{r}
+dbAppendTable(birdstrikedb, name='Altitude', value=altitude_df)
+dbAppendTable(birdstrikedb, name='WildlifeStruckRange', value=wildlifestruck_df)
+dbAppendTable(birdstrikedb, name='aircraft', value=aircraft_df)
+dbAppendTable(birdstrikedb, name='aircraftengine', value=aircraftengine_df)
+dbAppendTable(birdstrikedb, name='airport', value=airport_df)
+dbAppendTable(birdstrikedb, name='incidentdescription', value=incident_df)
+dbAppendTable(birdstrikedb, name='incidentprecipitation', value=precipitation_df)
+dbAppendTable(birdstrikedb, name='flightdetails', value=flightdetails_df)
+```
+
+
+## PHASE 3: Querying the data
+This phase involved querying the newly populated database and making sure that the data inserted is accurate. 
+
+Create a SQL query against your database to find the number of bird strikes for each airport upon take-off or climb. Include all airlines. You may either use a {sql} code chunk or an R function to execute the query.
+```{sql connection=birdstrikedb}
+SELECT COUNT(*) as NumberOfBirdStrikes, flightdetails.AirportName, GROUP_CONCAT(RecordID) FROM incidentdescription 
+JOIN 
+flightdetails ON incidentdescription.RecordID = flightdetails.IncidentID
+WHERE incidentdescription.PhaseOfFlight IN ('Climb', 'Take-off run')
+GROUP BY flightdetails.AirportName
+```
+```{sql connection=birdstrikedb}
+SELECT SUM(NumberWildlifeStruck) as TotalNumberOfBirdStrikes, flightdetails.AirportName, GROUP_CONCAT(RecordID) FROM incidentdescription 
+JOIN 
+flightdetails ON incidentdescription.RecordID = flightdetails.IncidentID
+WHERE incidentdescription.PhaseOfFlight IN ('Climb', 'Take-off run')
+GROUP BY flightdetails.AirportName
+```
+
+Create a SQL query against your database to find the airports that had the most bird strike incidents (during any flight phase). Include all airlines. You may either use a {sql} code chunk or an R function to execute the query.
+```{sql connection=birdstrikedb}
+SELECT COUNT(*) as NumberOfBirdStrikes, flightdetails.AirportName, GROUP_CONCAT(RecordID) FROM incidentdescription 
+JOIN 
+flightdetails ON incidentdescription.RecordID = flightdetails.IncidentID
+GROUP BY flightdetails.AirportName
+ORDER BY NumberOfBirdStrikes DESC
+LIMIT 1
+```
+
+Create a SQL query against your database to find the number of bird strike incidents by year. Include all airlines. You may either use a {sql} code chunk or an R function to execute the query.
+```{sql connection=birdstrikedb}
+SELECT COUNT(*) as NumberOfBirdStrikes, YEAR(flightdetails.FlightDate) as Year
+FROM incidentdescription 
+JOIN 
+flightdetails ON incidentdescription.RecordID = flightdetails.IncidentID
+GROUP BY Year
+ORDER BY Year
+```
+
+## Visualization 
+Continuation of the previous phase but using R to visualize the data to further cement our belief that we have inserted the correct data. 
+
+Using the above data, build a line graph that visualizes the number of bird strikes incidents per year from 2000 to 2011. Adorn the graph with appropriate axis labels.
+```{r}
+sql_command <- 'SELECT YEAR(flightdetails.FlightDate) as Year, COUNT(*) as NumberOfBirdStrikes
+FROM 
+incidentdescription 
+JOIN 
+flightdetails ON incidentdescription.RecordID = flightdetails.IncidentID
+GROUP BY Year
+HAVING Year != 1969'
+birdstrikes_by_year <- data.frame(dbGetQuery(birdstrikedb, sql_command))
+xValue <- birdstrikes_by_year$Year
+yValue <- birdstrikes_by_year$NumberOfBirdStrikes
+```
+
+```{r}
+ggplot(birdstrikes_by_year, aes(x=as.integer(xValue), y=as.integer(yValue))) +
+  geom_line() + geom_point() + geom_text(aes(label=yValue)) + labs(x='Year', y='NumberOfBirdStrikes', 
+                                    title='Number of Bird Strikes by Year') + 
+  scale_x_continuous(breaks = seq(2000,2011)) + scale_y_continuous()
+```
+
+## Stored Procedure 
+A stored procedure is created to add a new bird strike incident to the database. The needed arguments are airport name, aircraft type, flight date, airline, and flight phase and default values for the rest of the values. 
+To show that the insertion worked as expected, the inserted data is retrieved and displayed. 
+
+STORED PROCEDURE
+A procedure is created that first adds incident details (which in this case is the phase of flight details) to the IncidentDescription table. Since PhaseOfFlight is an enum, an automatic check constraint is administered for the value inserted and an error is returned if the value is not a part of the Enum. Inserting this record in the IncidentDescription would create a new tuple with a new RecordID that is an autoincremented value. Hence, we know that the latest tuple would have the largest record ID (since autoincrement works in a way where it increases 1 from the largest value present in the column at that current time). Hence the record ID for the newly inserted tuple is returned using the MAX operator. This is then used to insert the rest of the flight details into the FlightDetails table. If all the previous commands run successfully, then a SELECT command is implemented that displays that a new record is inserted successfully into the database. 
+
+This stored procedure works in the assumption that the aircraft model and AirportName already exists in the database and hence would not require additional inserts in the Airport and Aircraft table. 
+```{sql connection=birdstrikedb}
+CREATE PROCEDURE InsertNewRecord(IN flightphase VARCHAR(15), IN aircraft_model VARCHAR(25), 
+IN flight_date VARCHAR(30), IN airlines VARCHAR(60), IN airport_name VARCHAR(60))
+BEGIN
+DECLARE newrecord_id INT;
+DECLARE date_object DATE; 
+SELECT STR_TO_DATE(flight_date,'%Y-%m-%d') INTO date_object;
+  INSERT into IncidentDescription (PhaseOfFlight) VALUES (flightphase);
+  SELECT MAX(RecordID) FROM incidentdescription INTO newrecord_id;
+  INSERT INTO flightdetails (IncidentID, FlightDate, Operator, AirportName, AircraftModel) VALUES (newrecord_id, flight_date, airlines, airport_name, aircraft_model);
+  SELECT 'Inserted new row into the database' AS STATUS;
+END;
+```
+
+Calling the stored procedure
+```{sql connection=birdstrikedb}
+CALL InsertNewRecord('Landing Roll', 'A-300', '2011-09-20', 'BUSINESS', 'LOGAN INTL');
+```
+Testing to see if the data is inserted in the database. 
+```{sql connection=birdstrikedb}
+SELECT A.RecordID, A.PhaseOfFlight, B.AircraftModel, B.Operator, B.FlightDate, B.AirportName
+FROM incidentdescription as A
+JOIN Flightdetails as B
+ON 
+A.RecordID = B.incidentID
+WHERE RecordID in (SELECT MAX(RecordID) from incidentdescription);
+```
+## Conclusion
+The birdstrikes.csv file has finally been created into a functional database schema and the data has been populated to provide more details about the various birdstrikes that occur. During the course of the practicum, we had a lot of fun learning more about R and having a more practical use of normalization that isn't just condensed into a classroom activity. A lot of trial and error brought forth this project into fruition and we are excited to work harder and explore more about databases. 
